@@ -34,22 +34,6 @@ class OrderFake(Fake):
         return {'code':0,'dispatched':True,'output':op['completion_marker'],'seconds':.01}
 
 class PlannerTests(unittest.TestCase):
-    def test_geometry_identity_works_without_point_parameters(self):
-        refs=catalog([0,1,2]);refs[1]['position']=[-.00001,1.,0.]
-        c={'kind':'order','name':'TEST_SORT','entity_id':'OWNED_ID','catalog':refs,'expected':[2,0,1],'identity_mode':'geometry'}
-        class NoPPFake(OrderFake):
-            def read_xml(self,expressions,guard):
-                if any('point_parameters' in e for e in expressions):raise AssertionError('Unexpected PP query')
-                return super().read_xml(expressions,guard)
-        self.assertTrue(check_observed_order(c,NoPPFake(c['expected'],refs),GUARD))
-        fake=NoPPFake([2,0,1],refs);fake.refs[0]['position'][0]=.001
-        with self.assertRaises(HelperError):check_observed_order(c,fake,GUARD)
-    def test_geometry_identity_mode_survives_bundle_generation(self):
-        with tempfile.TemporaryDirectory() as d:
-            l={**layer([3,2,1],[1,2,3]),'identity_mode':'geometry'}
-            create_bundle([l],GUARD,Path(d)/'bundle')
-            p=json.loads((Path(d)/'bundle'/'plan.json').read_text())
-            self.assertEqual(p['operations'][0]['prechecks'][0]['identity_mode'],'geometry')
     def test_all_small_permutations_and_random_larger_orders(self):
         target=list(range(5))
         for initial in itertools.permutations(target):

@@ -59,6 +59,18 @@ class ExecutorTests(unittest.TestCase):
         self.fake.mode='code0_error'
         with self.assertRaises(HelperError):self.engine().run(allow_write=True)
         self.assertEqual(self.engine().store.load()['operations']['one']['status'],'uncertain')
+    def test_failed_verification_retains_native_time_and_failure_phase(self):
+        p=plan();p['operations'][0]['postchecks']=[check('wrong')]
+        with self.assertRaises(HelperError):self.engine(p).run(allow_write=True)
+        state=self.engine(p).store.load()['operations']['one']
+        self.assertEqual(state['native_seconds'],.01);self.assertEqual(state['failure_phase'],'postchecks');self.assertGreaterEqual(state['operation_seconds'],0)
+        events=[json.loads(l) for l in (self.root/'run/events.jsonl').read_text().splitlines()]
+        self.assertTrue(any(e['event']=='native_returned' and e['native_seconds']==.01 for e in events))
+    def test_timeout_duration_is_not_reported_as_known_native_time(self):
+        self.fake.mode='timeout_not_applied'
+        with self.assertRaises(TransportTimeout):self.engine().run(allow_write=True)
+        state=self.engine().store.load()['operations']['one']
+        self.assertIsNone(state['native_seconds']);self.assertEqual(state['failure_phase'],'native');self.assertGreaterEqual(state['operation_seconds'],0)
     def test_client_interruption_survives_restart(self):
         self.fake.mode='crash'
         with self.assertRaises(SystemExit):self.engine().run(allow_write=True)
@@ -123,6 +135,22 @@ class ExecutorTests(unittest.TestCase):
         e=self.engine(p);e.run(allow_write=True)
         self.fake.value='same name, different ID'
         with self.assertRaises(StateDrift):e.run(allow_write=True)
+    def test_xml_postconditions_are_batched_without_dropping_checks(self):
+        fake=self.fake;calls=[];original=fake.read_xml
+        def read(expressions,guard):calls.append(expressions);return original(expressions,guard)
+        fake.read_xml=read;p=plan();p['operations'][0]['postchecks']=[check('one') for _ in range(22)]
+        self.engine(p).run(allow_write=True)
+        self.assertEqual([len(x) for x in calls],[1,22])
+    def test_truncated_batch_cannot_pass_postconditions(self):
+        original=self.fake.read_xml
+        self.fake.read_xml=lambda expressions,guard:original(expressions,guard)[:-1] if len(expressions)>1 else original(expressions,guard)
+        p=plan();p['operations'][0]['postchecks']=[check('one'),check('one')]
+        with self.assertRaises(HelperError):self.engine(p).run(allow_write=True)
+        self.assertEqual(self.engine(p).store.load()['operations']['one']['status'],'uncertain')
+    def test_batched_failing_last_check_blocks_next_command(self):
+        p=plan(two=True);p['operations'][0]['postchecks']=[check('one'),check('wrong')]
+        with self.assertRaises(HelperError):self.engine(p).run(allow_write=True)
+        self.assertEqual(self.fake.calls,['one'])
     def test_root_parser_classification(self):
         self.assertTrue(root_context('Commands available :\nACTIVATE\nCREATE\nDEACTIVATE'))
         self.assertTrue(root_context('Commands available :\r\r\n\tACTIVATE\r\r\n\tCREATE\t"Создать объекты"\r\r\n\tDEACTIVATE'))

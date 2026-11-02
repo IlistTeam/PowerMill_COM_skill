@@ -1,19 +1,17 @@
-PowerMill COM — переносимый навык 0.2.3, помощник 0.2.2
+PowerMill COM — переносимый навык и помощник 0.5.0
 
-1. Распакуйте powermill-com целиком в одну из папок навыков Codex:
-   для всех проектов: %USERPROFILE%\.codex\skills\powermill-com
-   для одного проекта: <корень проекта>\.agents\skills\powermill-com
-   При другом CODEX_HOME используйте его папку skills для общей установки.
+1. Распакуйте powermill-com целиком в папку навыков Codex:
+   %USERPROFILE%\.codex\skills\powermill-com
+   При другом CODEX_HOME используйте его папку skills.
 2. Откройте новый чат или обновите список навыков; вызовите $powermill-com.
    Уже открытый чат может читать SKILL.md напрямую по полному пути.
 3. Помощник лежит в scripts\powermill_com_helper. Для запуска перейдите
    в scripts и используйте python -m powermill_com_helper --help.
 4. Требуются Windows, Python 3.12+, Windows PowerShell 5, PowerMill 2023.
-   Помощник принимает COM-версии 2023000, 2023003 и 2023101; на другой версии
-   сначала проверьте совместимость, не расширяя список наугад.
+   Поддерживаемые COM-версии: 2023000, 2023003 и 2023101. Охват проверок
+   указан в references/compatibility.md.
    Никаких ключей, PowerMill MCP или сторонних Python-пакетов не требуется.
-5. Сначала прочитайте SKILL.md и нужные references, включая simulation.md
-   при проверке роботной симуляции. Команды plan/validate/status
+5. Сначала прочитайте SKILL.md и references. Команды plan/validate/status
    работают офлайн. --connect разрешает подключение, --allow-write — запись
    только в пределах поручения пользователя. Новый поверхностный генератор
    ещё не испытывался нативно; первое испытание — на небольшой копии.

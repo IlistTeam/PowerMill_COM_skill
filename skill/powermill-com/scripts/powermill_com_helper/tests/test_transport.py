@@ -1,6 +1,8 @@
 from pathlib import Path
-import json,sys,tempfile,time,unittest
-from powermill_com_helper.transport import JsonLineProcess,TransportTimeout,ProtocolError
+import base64,json,os,sys,tempfile,time,unittest
+from unittest.mock import Mock
+from powermill_com_helper.transport import JsonLineProcess,TransportTimeout,ProtocolError,PowerMillTransport
+from powermill_com_helper.core import HelperError
 from powermill_com_helper.core import Executor
 from .test_executor import GUARD,plan
 
@@ -12,6 +14,27 @@ class Adapter:
     def execute(self,op,guard):return self.channel.request('execute',{'operation':op,'guard':guard},op['timeout_s'])
 
 class TransportTests(unittest.TestCase):
+    def test_channel_is_persistent_and_does_not_restart_after_close(self):
+        channel=JsonLineProcess([sys.executable,'-u',str(WORKER)])
+        self.assertEqual(channel.request('echo',{'n':1},5),{'n':1});pid=channel.process.pid
+        self.assertEqual(channel.request('echo',{'n':2},5),{'n':2});self.assertEqual(channel.process.pid,pid);channel.close()
+        with self.assertRaises(ProtocolError):channel.request('echo',{},5)
+    @unittest.skipUnless(os.name=='nt','Windows transport construction')
+    def test_pid_pinning_and_guard_mismatch_do_not_start_com(self):
+        with PowerMillTransport(connect=True,process_id=1234) as transport:
+            script=base64.b64decode(transport.channel.command[-1]).decode('utf-16le');self.assertIn('$targetProcessId=1234',script);self.assertIsNone(transport.channel.process)
+            self.assertLess(sum(len(x)+3 for x in transport.channel.command),32760)
+            with self.assertRaises(HelperError):transport.probe({**GUARD,'process_id':5678})
+            self.assertIsNone(transport.channel.process)
+        self.assertTrue(transport.channel.closed)
+        for pid in [True,0,-1,'1234']:
+            with self.assertRaises(HelperError):PowerMillTransport(connect=True,process_id=pid)
+        with self.assertRaises(HelperError):PowerMillTransport(connect=True,session_model_read='cached')
+    @unittest.skipUnless(os.name=='nt','Windows transport construction')
+    def test_incomplete_xml_transport_response_is_quarantined(self):
+        transport=PowerMillTransport(connect=True,process_id=1234);fake=Mock();fake.request.return_value=['<string>one</string>'];transport.channel=fake
+        with self.assertRaises(ProtocolError):transport.read_xml(['one','two'],GUARD)
+        self.assertTrue(fake.poisoned);fake.close.assert_called_once()
     def test_deadline_includes_a_blocked_large_pipe_write(self):
         channel=JsonLineProcess([sys.executable,'-u',str(WORKER),'--never-read'])
         try:

@@ -64,12 +64,15 @@ def validate_order_check(check):
     bins={}
     for i,row in enumerate(catalog):
         if len(row.get('position',[]))!=3:raise HelperError('A complete head position is required')
-        pos=[finite(v) for v in row['position']];lp=finite(row['lp']);layer=finite(row['layer'])
+        pos=[finite(v) for v in row['position']]
+        if geometry_only and 'head_pp' in row:raise HelperError('Geometry identity cannot verify head_pp; use a separate PP check')
+        lp=finite(row['lp']) if not geometry_only else None
+        layer=finite(row['layer']) if not geometry_only else None
         if 'axis' in row and (len(row['axis'])!=3 or not all(math.isfinite(finite(x)) for x in row['axis'])):raise HelperError('Invalid head axis')
         key=tuple(math.floor(v/(2*tolerance)) for v in pos)
         nearby=[other for delta in itertools.product((-1,0,1),repeat=3) for other in bins.get(tuple(k+d for k,d in zip(key,delta)),[])] if geometry_only else catalog[:i]
         for other in nearby:
-            if lp==finite(other['lp']) and layer==finite(other['layer']) and math.dist(pos,other['position'])<=2*tolerance:
+            if (geometry_only or lp==finite(other['lp']) and layer==finite(other['layer'])) and math.dist(pos,other['position'])<=2*tolerance:
                 raise HelperError('Ambiguous head/LP/layer identity; capture a stronger identity before sorting')
         bins.setdefault(key,[]).append(row)
     return check
@@ -177,7 +180,8 @@ def create_bundle(layers,guard,output,*,max_moves=64,enable_execution=False):
             lines+=['FORM ACCEPT TPLIST',f'STRING receipt = "{token}"',f'FILE OPEN "{receipt}" FOR WRITE AS {handle}',
                     f'FILE WRITE $receipt TO {handle}',f'FILE CLOSE {handle}',f'PRINT "{marker}"','}']
             path=output/'macros'/(opid+'.mac');data=('\r\n'.join(lines)+'\r\n').encode('cp1251');path.write_bytes(data)
-            base={'kind':'order','name':layer['name'],'entity_id':layer['entity_id'],'catalog':layer['catalog'],'identity_mode':layer.get('identity_mode','layer_lp'),'coverage':'all curve heads, layer and LP; optional head axis/PP; not a full geometry/PP audit'}
+            coverage='all unique curve head XYZ and optional axis; PP not read' if layer.get('identity_mode')=='geometry' else 'all curve heads, layer and LP; optional head axis/PP; not a full geometry/PP audit'
+            base={'kind':'order','name':layer['name'],'entity_id':layer['entity_id'],'catalog':layer['catalog'],'identity_mode':layer.get('identity_mode','layer_lp'),'coverage':coverage}
             operations.append({'id':opid,'checkpoint_key':layer['entity_id'],'command':f'MACRO "{path}"','artifact':{'path':str(path),'sha256':hashlib.sha256(data).hexdigest()},
                 'trust_macro':True,'completion_marker':marker,'timeout_s':max(30.,len(block)*2.),
                 'prechecks':[{**base,'expected':before}],
